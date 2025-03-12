@@ -1,4 +1,3 @@
-// اطمینان از بارگذاری DOM
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const getConfigBtn = document.querySelector('.get-btn');
@@ -12,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Error: .get-btn not found in DOM');
         return;
     }
-    console.log('DOM loaded, getConfigBtn found:', getConfigBtn);
+    console.log('Script loaded successfully, button found:', getConfigBtn);
 
     // Event Listener for Config Button
     getConfigBtn.addEventListener('click', async () => {
