@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fetchKeys = async () => {
         try {
             const response = await fetch('https://ancient.hmidreza13799.workers.dev/keys');
-            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
+            if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status} - ${await response.text()}`);
             const data = await response.json();
             if (!data.PublicKey || !data.PrivateKey) throw new Error('Invalid key response');
             return {
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     locale: 'en_US',
                 }),
             });
-            if (!response.ok) throw new Error(`Failed to fetch account: ${response.status}`);
+            if (!response.ok) throw new Error(`Failed to fetch account: ${response.status} - ${await response.text()}`);
             return response.json();
         } catch (error) {
             console.error('Error fetching account:', error);
