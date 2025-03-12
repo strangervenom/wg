@@ -19,8 +19,16 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('https://raw.githubusercontent.com/ircfspace/endpoint/refs/heads/main/ip.json');
             if (!response.ok) throw new Error(`Failed to fetch endpoints: ${response.status}`);
-            endpoints = await response.json();
-            console.log('Endpoints fetched:', endpoints);
+            const data = await response.json();
+            endpoints = {
+                ipv4: data.ipv4 || [],
+                ipv6: data.ipv6 || []
+            };
+            console.log('Endpoints loaded successfully:', endpoints);
+            if (endpoints.ipv4.length === 0 || endpoints.ipv6.length === 0) {
+                console.warn('One or both endpoint lists are empty, check JSON structure');
+                showPopup('Warning: Endpoint list is empty, using default.', 'warning');
+            }
         } catch (error) {
             console.error('Error fetching endpoints:', error);
             showPopup('Failed to load endpoints, using default.', 'error');
@@ -28,37 +36,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Initialize endpoints before button click
-    fetchEndpoints().then(() => {
-        // Event Listener for Config Button
-        getConfigBtn.addEventListener('click', async () => {
-            console.log('Get Free Config button clicked!');
-            getConfigBtn.disabled = true;
-            getConfigBtn.textContent = 'Generating...';
-            try {
-                showSpinner();
-                const { publicKey, privateKey } = await fetchKeys();
-                console.log('Keys fetched:', { publicKey, privateKey });
-                const installId = generateRandomString(22);
-                const fcmToken = `${installId}:APA91b${generateRandomString(134)}`;
-                const accountData = await fetchAccount(publicKey, installId, fcmToken);
-                console.log('Account data:', accountData);
-                const endpoint = getEndpoint(endpointChoice.value, endpoints);
-                if (accountData) generateConfig(accountData, privateKey, endpoint);
-            } catch (error) {
-                console.error('Error processing configuration:', error);
-                showPopup('Failed to generate config. Please try again.', 'error');
-            } finally {
-                hideSpinner();
-                getConfigBtn.disabled = false;
-                getConfigBtn.textContent = 'Get Free Config';
-                setTimeout(() => {
-                    if (wireGuardConfig.firstChild) {
-                        wireGuardConfig.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                }, 300);
+    // Initialize endpoints and then enable button
+    const initializeApp = async () => {
+        await fetchEndpoints();
+        getConfigBtn.disabled = false; // Enable button only after endpoints are loaded
+        console.log('App initialized, endpoints:', endpoints);
+    };
+
+    initializeApp().catch(error => console.error('Initialization failed:', error));
+
+    // Event Listener for Config Button
+    getConfigBtn.addEventListener('click', async () => {
+        console.log('Get Free Config button clicked! Selected endpoint type:', endpointChoice.value);
+        getConfigBtn.disabled = true;
+        getConfigBtn.textContent = 'Generating...';
+        try {
+            showSpinner();
+            const { publicKey, privateKey } = await fetchKeys();
+            console.log('Keys fetched:', { publicKey, privateKey });
+            const installId = generateRandomString(22);
+            const fcmToken = `${installId}:APA91b${generateRandomString(134)}`;
+            const accountData = await fetchAccount(publicKey, installId, fcmToken);
+            console.log('Account data:', accountData);
+            if (!accountData || !accountData.config || !accountData.config.interface || !accountData.config.peers) {
+                throw new Error('Invalid account data received');
             }
-        });
+            const endpoint = getEndpoint(endpointChoice.value, endpoints);
+            console.log('Selected endpoint:', endpoint); // Log the selected endpoint
+            generateConfig(accountData, privateKey, endpoint);
+        } catch (error) {
+            console.error('Error processing configuration:', error);
+            showPopup('Failed to generate config. Please try again.', 'error');
+        } finally {
+            hideSpinner();
+            getConfigBtn.disabled = false;
+            getConfigBtn.textContent = 'Get Free Config';
+            setTimeout(() => {
+                if (wireGuardConfig.firstChild) {
+                    wireGuardConfig.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 300);
+        }
     });
 
     // Fetch Public and Private Keys
@@ -113,7 +131,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return 'engage.cloudflareclient.com:2408';
         }
         const randomEndpoint = list[Math.floor(Math.random() * list.length)];
-        console.log(`Selected ${choice} endpoint: ${randomEndpoint}`);
         return randomEndpoint;
     };
 
@@ -223,6 +240,7 @@ Endpoint = ${endpoint}
         popup.className = 'popup-message';
         popup.textContent = message;
         if (type === 'error') popup.style.backgroundColor = '#d32f2f';
+        else if (type === 'warning') popup.style.backgroundColor = '#ff9800'; // Warning color
         document.body.appendChild(popup);
         setTimeout(() => popup.remove(), 2500);
     };
