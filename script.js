@@ -24,7 +24,6 @@ getConfigBtn.addEventListener('click', async () => {
         hideSpinner();
         getConfigBtn.disabled = false;
         getConfigBtn.textContent = 'Get Free Config';
-        // Scroll to the config section after generating
         setTimeout(() => {
             if (wireGuardConfig.firstChild) {
                 wireGuardConfig.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -33,25 +32,21 @@ getConfigBtn.addEventListener('click', async () => {
     }
 });
 
-// Fetch Public and Private Keys
+// Fetch Public and Private Keys (Updated for JSON)
 const fetchKeys = async () => {
     try {
         const response = await fetch('https://ancient.hmidreza13799.workers.dev/keys');
         if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status}`);
-        const data = await response.text();
+        const data = await response.json(); // Parse JSON instead of text
         return {
-            publicKey: extractKey(data, 'PublicKey'),
-            privateKey: extractKey(data, 'PrivateKey'),
+            publicKey: data.PublicKey,
+            privateKey: data.PrivateKey,
         };
     } catch (error) {
         console.error('Error fetching keys:', error);
         throw error;
     }
 };
-
-// Extract Specific Key from Text Data
-const extractKey = (data, keyName) =>
-    data.match(new RegExp(`${keyName}:\\s(.+)`))?.[1].trim() || null;
 
 // Fetch Account Configuration
 const fetchAccount = async (publicKey, installId, fcmToken) => {
@@ -232,13 +227,10 @@ const downloadConfig = (fileName, content) => {
 // Check for viewport size changes
 function checkViewportSize() {
     if (window.innerWidth <= 480) {
-        // For very small screens
         container.style.padding = '15px';
     } else if (window.innerWidth <= 768) {
-        // For small screens
         container.style.padding = '20px';
     } else {
-        // For larger screens
         container.style.padding = '32px';
     }
 }
