@@ -20,18 +20,17 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             showSpinner();
             // فقط یک بار کلیدها رو بگیر
-            if (!keys) {
-                keys = await fetchKeys();
-                console.log('Keys fetched:', keys);
-            }
+            keys = await fetchKeys();
+            console.log('Keys fetched:', keys);
             const installId = generateRandomString(22);
             const fcmToken = `${installId}:APA91b${generateRandomString(134)}`;
             const accountData = await fetchAccount(keys.publicKey, installId, fcmToken);
             console.log('Account data received:', accountData);
+            console.log('Comparing public keys:', { fetched: keys.publicKey, returned: accountData.key });
             if (accountData && (accountData.key === keys.publicKey)) {
                 generateConfig(accountData, keys.privateKey);
             } else {
-                throw new Error('Public keys do not match!');
+                throw new Error('Public keys do not match! Fetched: ' + keys.publicKey + ', Returned: ' + accountData.key);
             }
         } catch (error) {
             console.error('Error processing configuration:', error);
@@ -50,11 +49,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchKeys = async () => {
         try {
-            const response = await fetch('https://ancient.hmidreza13799.workers.dev/keys');
+            const response = await fetch('https://ancient.hmidreza13799.workers.dev/keys', { cache: 'no-store' });
             if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status} - ${await response.text()}`);
-            const data = await response.json();
-            if (!data.PublicKey || !data.PrivateKey) throw new Error('Invalid key response');
-            return { publicKey: data.PublicKey, privateKey: data.PrivateKey };
+            const text = await response.text(); // متن ساده رو می‌خونیم
+            const [publicKeyLine, privateKeyLine] = text.split('\n');
+            const publicKey = publicKeyLine.replace('PublicKey: ', '').trim();
+            const privateKey = privateKeyLine.replace('PrivateKey: ', '').trim();
+            if (!publicKey || !privateKey) throw new Error('Invalid key response');
+            return { publicKey, privateKey };
         } catch (error) {
             console.error('Error fetching keys:', error);
             throw error;
@@ -78,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     tos: new Date().toISOString(),
                     model: 'PC',
                     serial_number: installId,
-                    locale: 'en_US', // تغییر به en_US برای سازگاری با Cloudflare
+                    locale: 'en_US',
                 }),
             });
             if (!response.ok) throw new Error(`Failed to fetch account: ${response.status} - ${await response.text()}`);
