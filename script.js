@@ -19,18 +19,16 @@ document.addEventListener('DOMContentLoaded', () => {
         getConfigBtn.textContent = 'Generating...';
         try {
             showSpinner();
-            // فقط یک بار کلیدها رو بگیر
+            // گرفتن کلیدها از Worker
             keys = await fetchKeys();
             console.log('Keys fetched:', keys);
-            const installId = generateRandomString(22);
-            const fcmToken = `${installId}:APA91b${generateRandomString(134)}`;
-            const accountData = await fetchAccount(keys.publicKey, installId, fcmToken);
+            // ثبت‌نام اکانت با Worker
+            const accountData = await fetchAccount(keys.privateKey);
             console.log('Account data received:', accountData);
-            console.log('Comparing public keys:', { fetched: keys.publicKey, returned: accountData.key });
-            if (accountData && (accountData.key === keys.publicKey)) {
-                generateConfig(accountData, keys.privateKey);
+            if (accountData && accountData.success && accountData.data.public_key === keys.publicKey) {
+                generateConfig(accountData.data, keys.privateKey);
             } else {
-                throw new Error('Public keys do not match! Fetched: ' + keys.publicKey + ', Returned: ' + accountData.key);
+                throw new Error('Public keys do not match! Fetched: ' + keys.publicKey + ', Returned: ' + accountData.data.public_key);
             }
         } catch (error) {
             console.error('Error processing configuration:', error);
@@ -47,14 +45,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // گرفتن کلیدها از Worker
     const fetchKeys = async () => {
         try {
-            const response = await fetch('https://ancient.hmidreza13799.workers.dev/keys', { cache: 'no-store' });
+            const response = await fetch('https://ancient.hmidreza13799.workers.dev/keys', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+                cache: 'no-store'
+            });
             if (!response.ok) throw new Error(`Failed to fetch keys: ${response.status} - ${await response.text()}`);
-            const text = await response.text(); // متن ساده رو می‌خونیم
-            const [publicKeyLine, privateKeyLine] = text.split('\n');
-            const publicKey = publicKeyLine.replace('PublicKey: ', '').trim();
-            const privateKey = privateKeyLine.replace('PrivateKey: ', '').trim();
+            const text = await response.text();
+            const lines = text.split('\n');
+            const privateKey = lines[0].replace('Private Key: ', '').trim();
+            const publicKey = lines[1].replace('Public Key: ', '').trim();
             if (!publicKey || !privateKey) throw new Error('Invalid key response');
             return { publicKey, privateKey };
         } catch (error) {
@@ -63,28 +67,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const fetchAccount = async (publicKey, installId, fcmToken) => {
+    // ثبت‌نام اکانت با Worker
+    const fetchAccount = async (privateKey) => {
         const apiUrl = 'https://ancient.hmidreza13799.workers.dev/wg';
         try {
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
-                    'User-Agent': 'okhttp/3.12.1',
-                    'CF-Client-Version': 'a-6.10-2158',
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    key: publicKey,
-                    install_id: installId,
-                    fcm_token: fcmToken,
-                    tos: new Date().toISOString(),
-                    model: 'PC',
-                    serial_number: installId,
-                    locale: 'en_US',
-                }),
+                body: JSON.stringify({ privateKey })
             });
             if (!response.ok) throw new Error(`Failed to fetch account: ${response.status} - ${await response.text()}`);
-            return response.json();
+            return await response.json();
         } catch (error) {
             console.error('Error fetching account:', error);
             throw error;
@@ -92,19 +87,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const generateConfig = (data, privateKey) => {
-        if (!data.config || !data.config.peers || !data.config.peers[0] || !data.config.interface || !data.config.interface.addresses) {
+        if (!data.config || !data.config.peers || !data.config.peers[0] || !data.config.allowed_ips) {
             console.error('Invalid config data:', data);
             showPopup('Invalid configuration data received.', 'error');
             return;
         }
 
-        const reserved = generateReserved(data.config.client_id || '');
+        const reserved = generateReserved(data.client_id || '');
         const wireGuardText = generateWireGuardConfig(data, privateKey);
         const v2rayText = generateV2RayURL(
             privateKey,
             data.config.peers[0].public_key || '',
-            data.config.interface.addresses.v4 || '0.0.0.0',
-            data.config.interface.addresses.v6 || '::0',
+            data.config.allowed_ips[0].split('/')[0] || '0.0.0.0',
+            data.config.allowed_ips[1].split('/')[0] || '::0',
             reserved
         );
         updateDOM(wireGuardConfig, 'WireGuard Format', 'wireguardBox', wireGuardText, 'message1');
@@ -119,14 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateWireGuardConfig = (data, privateKey) => `
 [Interface]
 PrivateKey = ${privateKey}
-Address = ${data.config.interface.addresses.v4}/32, ${data.config.interface.addresses.v6}/128
-DNS = 1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001
+Address = ${data.config.allowed_ips[0]}, ${data.config.allowed_ips[1]}
+DNS = ${data.config.dns ? data.config.dns.join(', ') : '1.1.1.1, 1.0.0.1'}
 MTU = 1280
 
 [Peer]
 PublicKey = ${data.config.peers[0].public_key}
 AllowedIPs = 0.0.0.0/0, ::/0
-Endpoint = engage.cloudflareclient.com:2408
+Endpoint = ${data.config.peers[0].endpoint}
 `;
 
     const generateReserved = (clientId) =>
@@ -136,11 +131,11 @@ Endpoint = engage.cloudflareclient.com:2408
             .join(',');
 
     const generateV2RayURL = (privateKey, publicKey, ipv4, ipv6, reserved) =>
-        `wireguard://${encodeURIComponent(privateKey)}@engage.cloudflareclient.com:2408?address=${encodeURIComponent(
+        `wireguard://${encodeURIComponent(privateKey)}@${data.config.peers[0].endpoint}?address=${encodeURIComponent(
             ipv4 + '/32'
         )},${encodeURIComponent(ipv6 + '/128')}&reserved=${reserved}&publickey=${encodeURIComponent(
             publicKey
-        )}&mtu=1420#V2ray-Config`;
+        )}&mtu=1280#V2ray-Config`;
 
     const updateDOM = (container, title, textareaId, content, messageId) => {
         container.innerHTML = `
