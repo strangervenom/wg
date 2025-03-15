@@ -22,8 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // گرفتن کلیدها از Worker
             keys = await fetchKeys();
             console.log('Keys fetched:', keys);
-            // ثبت‌نام اکانت با Worker
-            const accountData = await fetchAccount(keys.privateKey);
+            // ثبت‌نام اکانت با Worker (فقط با publicKey)
+            const accountData = await fetchAccount(keys.publicKey);
             console.log('Account data received:', accountData);
             if (accountData && accountData.success && accountData.data.public_key === keys.publicKey) {
                 generateConfig(accountData.data, keys.privateKey);
@@ -67,8 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // ثبت‌نام اکانت با Worker
-    const fetchAccount = async (privateKey) => {
+    // ثبت‌نام اکانت با Worker (فقط با publicKey)
+    const fetchAccount = async (publicKey) => {
         const apiUrl = 'https://ancient.hmidreza13799.workers.dev/wg';
         try {
             const response = await fetch(apiUrl, {
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ privateKey })
+                body: JSON.stringify({ publicKey })
             });
             if (!response.ok) throw new Error(`Failed to fetch account: ${response.status} - ${await response.text()}`);
             return await response.json();
@@ -121,7 +121,7 @@ MTU = 1280
 [Peer]
 PublicKey = ${data.config.peers[0].public_key}
 AllowedIPs = 0.0.0.0/0, ::/0
-Endpoint = ${data.config.peers[0].endpoint}
+Endpoint = 188.114.99.134:4233
 `;
 
     const generateReserved = (clientId) =>
@@ -131,7 +131,7 @@ Endpoint = ${data.config.peers[0].endpoint}
             .join(',');
 
     const generateV2RayURL = (privateKey, publicKey, ipv4, ipv6, reserved) =>
-        `wireguard://${encodeURIComponent(privateKey)}@${data.config.peers[0].endpoint}?address=${encodeURIComponent(
+        `wireguard://${encodeURIComponent(privateKey)}@188.114.99.134:4233?address=${encodeURIComponent(
             ipv4 + '/32'
         )},${encodeURIComponent(ipv6 + '/128')}&reserved=${reserved}&publickey=${encodeURIComponent(
             publicKey
